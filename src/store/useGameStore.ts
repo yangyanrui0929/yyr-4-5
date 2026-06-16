@@ -340,6 +340,11 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
     const waves = generateWaves(state.day);
 
     const defectMonsters = state.capturedMonsters.filter((m) => m.willDefect);
+    const defectionEvents: DefectionEvent[] = defectMonsters.map((m) => ({
+      day: state.day,
+      monsterName: m.name,
+      monsterType: m.type,
+    }));
 
     set({
       phase: "night",
@@ -355,6 +360,8 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       selectedTowerId: null,
       isPaused: false,
       selectedCaptureTool: null,
+      capturedMonsters: state.capturedMonsters.filter((m) => !m.willDefect),
+      todayDefections: defectionEvents,
       defectMonstersPending: defectMonsters,
     });
   },
@@ -384,7 +391,6 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
 
     const afterDayState = get();
     afterDayState.processDailyHunger();
-    afterDayState.processDefections();
     afterDayState.triggerOrganizeStock();
     get().saveProgress();
   },
@@ -663,10 +669,10 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
     const monster = state.capturedMonsters.find((m) => m.id === monsterId);
     if (!monster) return false;
 
+    if (monster.preferredRecipeId !== recipeId) return false;
+
     const recipe = state.recipes.find((r) => r.id === recipeId);
     if (!recipe || recipe.prepared <= 0) return false;
-
-    const isPreferred = monster.preferredRecipeId === recipeId;
 
     set((s) => ({
       recipes: s.recipes.map((r) =>
@@ -674,16 +680,10 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       ),
       capturedMonsters: s.capturedMonsters.map((m) => {
         if (m.id !== monsterId) return m;
-        const hungerGain = isPreferred
-          ? MONSTER_DEFAULT_STATS.hungerFedFull
-          : MONSTER_DEFAULT_STATS.hungerFedOther;
-        const loyaltyGain = isPreferred
-          ? MONSTER_DEFAULT_STATS.loyaltyFedPreferred
-          : MONSTER_DEFAULT_STATS.loyaltyFedOther;
         return {
           ...m,
-          hunger: Math.min(m.maxHunger, m.hunger + hungerGain),
-          loyalty: Math.min(m.maxLoyalty, m.loyalty + loyaltyGain),
+          hunger: Math.min(m.maxHunger, m.hunger + MONSTER_DEFAULT_STATS.hungerFedFull),
+          loyalty: Math.min(m.maxLoyalty, m.loyalty + MONSTER_DEFAULT_STATS.loyaltyFedPreferred),
           willDefect: false,
         };
       }),

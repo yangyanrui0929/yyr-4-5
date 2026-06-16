@@ -59,11 +59,8 @@ function MonsterCard({ monster }: { monster: CapturedMonster }) {
     if (!recipe || recipe.prepared <= 0) return;
     const ok = feedMonster(monster.id, recipeId);
     if (ok) {
-      const isPreferred = recipeId === monster.preferredRecipeId;
       showMsg(
-        isPreferred
-          ? `💕 最爱！饱腹+${MONSTER_DEFAULT_STATS.hungerFedFull} 忠诚+${MONSTER_DEFAULT_STATS.loyaltyFedPreferred}`
-          : `😋 饱腹+${MONSTER_DEFAULT_STATS.hungerFedOther} 忠诚+${MONSTER_DEFAULT_STATS.loyaltyFedOther}`
+        `💕 最爱菜品！饱腹+${MONSTER_DEFAULT_STATS.hungerFedFull} 忠诚+${MONSTER_DEFAULT_STATS.loyaltyFedPreferred}`
       );
     }
   };
@@ -136,37 +133,26 @@ function MonsterCard({ monster }: { monster: CapturedMonster }) {
       <div className="mt-2">
         <div className="text-xs font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
           <UtensilsCrossed className="w-3 h-3" />
-          投喂菜品
+          指定投喂
           {preferredRecipe && (
             <span className="text-pink-500 ml-1">
-              (最爱: {preferredRecipe.emoji} {preferredRecipe.name})
+              （仅接受: {preferredRecipe.emoji} {preferredRecipe.name}）
             </span>
           )}
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {recipes
-            .filter((r) => r.prepared > 0)
-            .map((r) => {
-              const isPreferred = r.id === monster.preferredRecipeId;
-              return (
-                <button
-                  key={r.id}
-                  onClick={() => handleFeed(r.id)}
-                  className={`px-2 py-1 rounded-md text-xs font-medium shadow-sm transition-all hover:scale-105 ${
-                    isPreferred
-                      ? "bg-gradient-to-r from-pink-400 to-rose-400 text-white hover:shadow-md"
-                      : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50"
-                  }`}
-                  title={isPreferred ? "投喂喜爱食物，加成更多！" : "普通食物"}
-                >
-                  {r.emoji} {r.name}
-                  <span className="opacity-70 ml-1">x{r.prepared}</span>
-                </button>
-              );
-            })}
-          {recipes.every((r) => r.prepared <= 0) && (
-            <span className="text-xs text-slate-400 italic">
-              还没准备菜品，先去菜单里做一些吧
+          {preferredRecipe && preferredRecipe.prepared > 0 ? (
+            <button
+              onClick={() => handleFeed(preferredRecipe.id)}
+              className="px-3 py-1.5 rounded-md text-xs font-medium shadow-sm transition-all hover:scale-105 bg-gradient-to-r from-pink-400 to-rose-400 text-white hover:shadow-md"
+              title="投喂指定喜爱菜品，恢复饱腹和忠诚"
+            >
+              {preferredRecipe.emoji} {preferredRecipe.name}
+              <span className="opacity-70 ml-1">x{preferredRecipe.prepared}</span>
+            </button>
+          ) : (
+            <span className="text-xs text-red-500 italic">
+              {preferredRecipe ? `还没有准备${preferredRecipe.name}，快去菜单做一份！` : "没有指定菜品"}
             </span>
           )}
         </div>
@@ -180,15 +166,15 @@ function MonsterCard({ monster }: { monster: CapturedMonster }) {
       {(hungerLow || loyaltyLow) && !monster.willDefect && (
         <div className="mt-2 p-1.5 bg-yellow-100 rounded text-xs text-yellow-800 flex items-center gap-1">
           <AlertTriangle className="w-3 h-3" />
-          {hungerLow && !loyaltyLow && "快饿扁了！赶紧投喂～"}
-          {!hungerLow && loyaltyLow && "忠诚度偏低，建议投喂最爱菜品～"}
-          {hungerLow && loyaltyLow && "情况危险！饥饿加忠诚双低！"}
+          {hungerLow && !loyaltyLow && "快饿扁了！投喂指定菜品恢复饱腹～"}
+          {!hungerLow && loyaltyLow && "忠诚度偏低！投喂指定菜品可挽回～"}
+          {hungerLow && loyaltyLow && "情况危险！饥饿加忠诚双低，快投喂指定菜品！"}
         </div>
       )}
       {monster.willDefect && (
         <div className="mt-2 p-1.5 bg-red-100 rounded text-xs text-red-700 font-bold flex items-center gap-1">
           <AlertTriangle className="w-3 h-3" />
-          警告：今晚将带队叛逃反扑！快投喂最爱菜品挽回！
+          警告：今晚将带队叛逃反扑！投喂指定菜品可挽回忠诚！
         </div>
       )}
     </div>
