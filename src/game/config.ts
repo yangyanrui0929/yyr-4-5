@@ -4,6 +4,9 @@ import type {
   TowerConfig,
   EnemyConfig,
   WaveConfig,
+  CaptureToolConfig,
+  MonsterAbilities,
+  EnemyType,
 } from "@/types/game";
 
 export const GRID_COLS = 15;
@@ -241,3 +244,77 @@ export function generateWaves(day: number): WaveConfig[] {
 
 export const INITIAL_GOLD = 200;
 export const INITIAL_LIVES = 10;
+
+export const CAPTURE_TOOL_CONFIGS: Record<string, CaptureToolConfig> = {
+  catcher_pot: {
+    type: "catcher_pot",
+    name: "捕网锅",
+    emoji: "🪤",
+    cost: 30,
+    baseSuccessRate: 0.7,
+    description: "抛出锅网抓住低血量敌人，成功率中等",
+  },
+  comfort_dish: {
+    type: "comfort_dish",
+    name: "安抚菜",
+    emoji: "🍲",
+    cost: 50,
+    baseSuccessRate: 0.95,
+    description: "用美味料理安抚敌人，几乎一定能收编",
+  },
+};
+
+export const INITIAL_CAPTURE_TOOLS = [
+  { type: "catcher_pot" as const, count: 2 },
+  { type: "comfort_dish" as const, count: 1 },
+];
+
+export interface MonsterAbilityConfig {
+  ability: MonsterAbilities;
+  abilityValue: number;
+  preferredRecipeId: string;
+  description: string;
+}
+
+export const MONSTER_ABILITY_CONFIGS: Record<Exclude<EnemyType, "boss">, MonsterAbilityConfig> = {
+  cabbage: {
+    ability: "organize_stock",
+    abilityValue: 2,
+    preferredRecipeId: "stir_fry_cabbage",
+    description: "每天整理库存，自动获得随机食材 x2",
+  },
+  potato: {
+    ability: "reduce_cost",
+    abilityValue: 0.2,
+    preferredRecipeId: "potato_shreds",
+    description: "降低食材采购价 20%",
+  },
+  tomato: {
+    ability: "organize_stock",
+    abilityValue: 1,
+    preferredRecipeId: "tomato_egg",
+    description: "整理库存，自动获得随机食材 x1",
+  },
+  meat: {
+    ability: "enhance_tower",
+    abilityValue: 0.25,
+    preferredRecipeId: "braised_pork",
+    description: "增强所有防御塔伤害 +25%",
+  },
+};
+
+export const MONSTER_DEFAULT_STATS = {
+  maxHunger: 100,
+  maxLoyalty: 100,
+  startHunger: 80,
+  startLoyalty: 60,
+  hungerDecayPerDay: 30,
+  loyaltyDecayPerDay: 15,
+  hungerFedFull: 50,
+  loyaltyFedPreferred: 30,
+  loyaltyFedOther: 10,
+  hungerFedOther: 30,
+  captureHpThreshold: 0.3,
+  defectionLoyaltyThreshold: 20,
+};
+

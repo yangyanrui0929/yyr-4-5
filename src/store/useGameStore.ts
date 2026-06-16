@@ -5,6 +5,10 @@ import type {
   Enemy,
   Bullet,
   FloatingText,
+  CaptureToolType,
+  CapturedMonster,
+  EnemyType,
+  DefectionEvent,
 } from "@/types/game";
 import {
   INITIAL_GOLD,
@@ -17,6 +21,10 @@ import {
   ENEMY_CONFIGS,
   CELL_SIZE,
   generateWaves,
+  INITIAL_CAPTURE_TOOLS,
+  CAPTURE_TOOL_CONFIGS,
+  MONSTER_ABILITY_CONFIGS,
+  MONSTER_DEFAULT_STATS,
 } from "@/game/config";
 import { loadGame, saveGame } from "@/utils/storage";
 
@@ -60,6 +68,26 @@ interface GameActions {
   finishAllWaves: () => void;
   setGameOver: () => void;
   getCurrentWaves: () => ReturnType<typeof generateWaves>;
+
+  buyCaptureTool: (type: CaptureToolType, amount: number) => boolean;
+  selectCaptureTool: (type: CaptureToolType | null) => void;
+  tryCaptureEnemy: (
+    enemyId: string,
+    toolType: CaptureToolType
+  ) => { success: boolean; message: string };
+
+  feedMonster: (monsterId: string, recipeId: string) => boolean;
+  releaseMonster: (monsterId: string) => void;
+
+  getIngredientDiscount: () => number;
+  getTowerDamageBoost: () => number;
+  getOrganizeStockBonus: () => { ingredientId: string; count: number }[];
+
+  processDailyHunger: () => void;
+  processDefections: () => void;
+  triggerOrganizeStock: () => void;
+  addDefectedMonsterToWave: (monsters: CapturedMonster[]) => Enemy[];
+  clearPendingDefections: () => void;
 }
 
 const createInitialState = (): GameState => {
@@ -88,6 +116,11 @@ const createInitialState = (): GameState => {
       gridPath: GRID_PATH,
       isPaused: false,
       gameOver: false,
+      captureTools: saved.captureTools ?? INITIAL_CAPTURE_TOOLS.map((t) => ({ ...t })),
+      selectedCaptureTool: null,
+      capturedMonsters: saved.capturedMonsters ?? [],
+      todayDefections: [],
+      defectMonstersPending: [],
     };
   }
 
@@ -114,6 +147,11 @@ const createInitialState = (): GameState => {
     gridPath: GRID_PATH,
     isPaused: false,
     gameOver: false,
+    captureTools: INITIAL_CAPTURE_TOOLS.map((t) => ({ ...t })),
+    selectedCaptureTool: null,
+    capturedMonsters: [],
+    todayDefections: [],
+    defectMonstersPending: [],
   };
 };
 
@@ -144,6 +182,11 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       selectedTowerId: null,
       isPaused: false,
       gameOver: false,
+      captureTools: INITIAL_CAPTURE_TOOLS.map((t) => ({ ...t })),
+      selectedCaptureTool: null,
+      capturedMonsters: [],
+      todayDefections: [],
+      defectMonstersPending: [],
     });
   },
 
@@ -157,6 +200,8 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       lives: saved.lives ?? INITIAL_LIVES,
       ingredients: saved.ingredients ?? INITIAL_INGREDIENTS.map((i) => ({ ...i })),
       recipes: saved.recipes ?? INITIAL_RECIPES.map((r) => ({ ...r })),
+      captureTools: saved.captureTools ?? INITIAL_CAPTURE_TOOLS.map((t) => ({ ...t })),
+      capturedMonsters: saved.capturedMonsters ?? [],
     });
     return true;
   },
@@ -165,11 +210,57 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
     saveGame(get());
   },
 
+  getIngredientDiscount: () => {
+    const state = get();
+    let discount = 0;
+    for (const m of state.capturedMonsters) {
+      if (m.ability === "reduce_cost" && !m.willDefect) {
+        discount += m.abilityValue;
+      }
+    }
+    return Math.min(discount, 0.8);
+  },
+
+  getTowerDamageBoost: () => {
+    const state = get();
+    let boost = 0;
+    for (const m of state.capturedMonsters) {
+      if (m.ability === "enhance_tower" && !m.willDefect) {
+        boost += m.abilityValue;
+      }
+    }
+    return boost;
+  },
+
+  getOrganizeStockBonus: () => {
+    const state = get();
+    const bonuses: { ingredientId: string; count: number }[] = [];
+    const ingredientIds = state.ingredients.map((i) => i.id);
+    for (const m of state.capturedMonsters) {
+      if (m.ability === "organize_stock" && !m.willDefect) {
+        for (let i = 0; i < m.abilityValue; i++) {
+          const randomId = ingredientIds[Math.floor(Math.random() * ingredientIds.length)];
+          const existing = bonuses.find((b) => b.ingredientId === randomId);
+          if (existing) {
+            existing.count += 1;
+          } else {
+            bonuses.push({ ingredientId: randomId, count: 1 });
+          }
+        }
+      }
+    }
+    return bonuses;
+  },
+
   buyIngredient: (ingredientId: string, amount: number) => {
     const state = get();
     const ingredient = state.ingredients.find((i) => i.id === ingredientId);
     if (!ingredient) return false;
-    const totalCost = ingredient.price * amount;
+
+    const discount = get().getIngredientDiscount();
+    const unitPrice = Math.max(1, Math.floor(ingredient.price * (1 - discount)));
+    const totalCost = unitPrice * amount;
+
     if (state.gold < totalCost) return false;
 
     set((s) => ({
@@ -247,6 +338,9 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
   startNight: () => {
     const state = get();
     const waves = generateWaves(state.day);
+
+    const defectMonsters = state.capturedMonsters.filter((m) => m.willDefect);
+
     set({
       phase: "night",
       currentWave: 0,
@@ -260,6 +354,8 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       selectedTowerType: null,
       selectedTowerId: null,
       isPaused: false,
+      selectedCaptureTool: null,
+      defectMonstersPending: defectMonsters,
     });
   },
 
@@ -280,14 +376,22 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       waveInProgress: false,
       selectedTowerType: null,
       selectedTowerId: null,
+      selectedCaptureTool: null,
       isPaused: false,
+      todayDefections: [],
+      defectMonstersPending: [],
     }));
+
+    const afterDayState = get();
+    afterDayState.processDailyHunger();
+    afterDayState.processDefections();
+    afterDayState.triggerOrganizeStock();
     get().saveProgress();
   },
 
-  selectTowerType: (type) => set({ selectedTowerType: type, selectedTowerId: null }),
+  selectTowerType: (type) => set({ selectedTowerType: type, selectedTowerId: null, selectedCaptureTool: null }),
 
-  selectTower: (towerId) => set({ selectedTowerId: towerId, selectedTowerType: null }),
+  selectTower: (towerId) => set({ selectedTowerId: towerId, selectedTowerType: null, selectedCaptureTool: null }),
 
   placeTower: (gridX: number, gridY: number) => {
     const state = get();
@@ -462,13 +566,247 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
   setGameOver: () => set({ gameOver: true, phase: "settlement" }),
 
   getCurrentWaves: () => generateWaves(get().day),
+
+  buyCaptureTool: (type: CaptureToolType, amount: number) => {
+    const state = get();
+    const cfg = CAPTURE_TOOL_CONFIGS[type];
+    if (!cfg) return false;
+    const totalCost = cfg.cost * amount;
+    if (state.gold < totalCost) return false;
+
+    set((s) => ({
+      gold: s.gold - totalCost,
+      todayExpense: s.todayExpense + totalCost,
+      captureTools: s.captureTools.map((t) =>
+        t.type === type ? { ...t, count: t.count + amount } : t
+      ),
+    }));
+    return true;
+  },
+
+  selectCaptureTool: (type) =>
+    set({
+      selectedCaptureTool: type,
+      selectedTowerType: null,
+      selectedTowerId: null,
+    }),
+
+  tryCaptureEnemy: (enemyId: string, toolType: CaptureToolType) => {
+    const state = get();
+    const enemy = state.enemies.find((e) => e.id === enemyId);
+    if (!enemy) return { success: false, message: "敌人不存在" };
+    if (enemy.type === "boss") return { success: false, message: "无法收编BOSS！" };
+
+    const tool = state.captureTools.find((t) => t.type === toolType);
+    if (!tool || tool.count <= 0) return { success: false, message: "捕获工具不足" };
+
+    const hpRatio = enemy.hp / enemy.maxHp;
+    if (hpRatio > MONSTER_DEFAULT_STATS.captureHpThreshold) {
+      return { success: false, message: `敌人血量太高（${Math.floor(hpRatio * 100)}%），先削弱到30%以下！` };
+    }
+
+    const hpBonus = (MONSTER_DEFAULT_STATS.captureHpThreshold - hpRatio) * 0.5;
+    const cfg = CAPTURE_TOOL_CONFIGS[toolType];
+    const successRate = Math.min(0.99, cfg.baseSuccessRate + hpBonus);
+    const roll = Math.random();
+    const success = roll < successRate;
+
+    set((s) => ({
+      captureTools: s.captureTools.map((t) =>
+        t.type === toolType ? { ...t, count: t.count - 1 } : t
+      ),
+      enemies: success ? s.enemies.filter((e) => e.id !== enemyId) : s.enemies,
+    }));
+
+    if (success) {
+      const abilityCfg = MONSTER_ABILITY_CONFIGS[enemy.type as Exclude<EnemyType, "boss">];
+      const enemyCfg = ENEMY_CONFIGS[enemy.type];
+      const newMonster: CapturedMonster = {
+        id: genId(),
+        type: enemy.type,
+        name: enemyCfg.name,
+        emoji: enemyCfg.emoji,
+        hunger: MONSTER_DEFAULT_STATS.startHunger,
+        maxHunger: MONSTER_DEFAULT_STATS.maxHunger,
+        loyalty: MONSTER_DEFAULT_STATS.startLoyalty,
+        maxLoyalty: MONSTER_DEFAULT_STATS.maxLoyalty,
+        ability: abilityCfg.ability,
+        abilityValue: abilityCfg.abilityValue,
+        preferredRecipeId: abilityCfg.preferredRecipeId,
+        capturedDay: state.day,
+        willDefect: false,
+      };
+      set((s) => ({
+        capturedMonsters: [...s.capturedMonsters, newMonster],
+        selectedCaptureTool: null,
+      }));
+      get().addFloatingText({
+        x: enemy.x,
+        y: enemy.y - 20,
+        text: `✅ 收编成功！`,
+        color: "#4CAF50",
+      });
+      return { success: true, message: `成功收编了${enemyCfg.name}！` };
+    } else {
+      get().addFloatingText({
+        x: enemy.x,
+        y: enemy.y - 20,
+        text: `❌ 捕获失败`,
+        color: "#F44336",
+      });
+      return { success: false, message: "捕获失败，敌人挣脱了！" };
+    }
+  },
+
+  feedMonster: (monsterId: string, recipeId: string) => {
+    const state = get();
+    const monster = state.capturedMonsters.find((m) => m.id === monsterId);
+    if (!monster) return false;
+
+    const recipe = state.recipes.find((r) => r.id === recipeId);
+    if (!recipe || recipe.prepared <= 0) return false;
+
+    const isPreferred = monster.preferredRecipeId === recipeId;
+
+    set((s) => ({
+      recipes: s.recipes.map((r) =>
+        r.id === recipeId ? { ...r, prepared: r.prepared - 1 } : r
+      ),
+      capturedMonsters: s.capturedMonsters.map((m) => {
+        if (m.id !== monsterId) return m;
+        const hungerGain = isPreferred
+          ? MONSTER_DEFAULT_STATS.hungerFedFull
+          : MONSTER_DEFAULT_STATS.hungerFedOther;
+        const loyaltyGain = isPreferred
+          ? MONSTER_DEFAULT_STATS.loyaltyFedPreferred
+          : MONSTER_DEFAULT_STATS.loyaltyFedOther;
+        return {
+          ...m,
+          hunger: Math.min(m.maxHunger, m.hunger + hungerGain),
+          loyalty: Math.min(m.maxLoyalty, m.loyalty + loyaltyGain),
+          willDefect: false,
+        };
+      }),
+    }));
+    return true;
+  },
+
+  releaseMonster: (monsterId: string) => {
+    set((s) => ({
+      capturedMonsters: s.capturedMonsters.filter((m) => m.id !== monsterId),
+    }));
+  },
+
+  processDailyHunger: () => {
+    set((s) => ({
+      capturedMonsters: s.capturedMonsters.map((m) => {
+        const newHunger = Math.max(0, m.hunger - MONSTER_DEFAULT_STATS.hungerDecayPerDay);
+        const hungerPenalty = newHunger <= 0 ? MONSTER_DEFAULT_STATS.loyaltyDecayPerDay : 0;
+        const newLoyalty = Math.max(
+          0,
+          m.loyalty - MONSTER_DEFAULT_STATS.loyaltyDecayPerDay - hungerPenalty
+        );
+        const willDefect = newLoyalty <= MONSTER_DEFAULT_STATS.defectionLoyaltyThreshold;
+        return {
+          ...m,
+          hunger: newHunger,
+          loyalty: newLoyalty,
+          willDefect,
+        };
+      }),
+    }));
+  },
+
+  processDefections: () => {
+    const state = get();
+    const toDefect = state.capturedMonsters.filter((m) => m.willDefect);
+    if (toDefect.length === 0) return;
+
+    const events: DefectionEvent[] = toDefect.map((m) => ({
+      day: state.day,
+      monsterName: m.name,
+      monsterType: m.type,
+    }));
+
+    set((s) => ({
+      todayDefections: events,
+      capturedMonsters: s.capturedMonsters.filter((m) => !m.willDefect),
+    }));
+  },
+
+  triggerOrganizeStock: () => {
+    const bonuses = get().getOrganizeStockBonus();
+    if (bonuses.length === 0) return;
+
+    set((s) => ({
+      ingredients: s.ingredients.map((ing) => {
+        const bonus = bonuses.find((b) => b.ingredientId === ing.id);
+        if (bonus) {
+          return { ...ing, count: ing.count + bonus.count };
+        }
+        return ing;
+      }),
+    }));
+  },
+
+  addDefectedMonsterToWave: (monsters: CapturedMonster[]) => {
+    const state = get();
+    const startPos = state.path[0];
+    const difficulty = 1 + (state.day - 1) * 0.2;
+    const addedEnemies: Enemy[] = [];
+
+    for (const m of monsters) {
+      const cfg = ENEMY_CONFIGS[m.type];
+      const enemy: Enemy = {
+        id: genId(),
+        type: m.type,
+        hp: Math.floor(cfg.hp * difficulty * 1.3),
+        maxHp: Math.floor(cfg.hp * difficulty * 1.3),
+        x: startPos.x,
+        y: startPos.y,
+        pathIndex: 0,
+        slowUntil: 0,
+        slowFactor: 1,
+        hitFlash: 0,
+      };
+      addedEnemies.push(enemy);
+    }
+
+    const extraType: EnemyType[] = ["cabbage", "potato", "tomato"];
+    for (let i = 0; i < monsters.length * 2; i++) {
+      const t = extraType[i % extraType.length];
+      const cfg = ENEMY_CONFIGS[t];
+      const enemy: Enemy = {
+        id: genId(),
+        type: t,
+        hp: Math.floor(cfg.hp * difficulty),
+        maxHp: Math.floor(cfg.hp * difficulty),
+        x: startPos.x,
+        y: startPos.y,
+        pathIndex: 0,
+        slowUntil: 0,
+        slowFactor: 1,
+        hitFlash: 0,
+      };
+      addedEnemies.push(enemy);
+    }
+
+    set((s) => ({
+      enemies: [...s.enemies, ...addedEnemies],
+    }));
+
+    return addedEnemies;
+  },
+
+  clearPendingDefections: () => set({ defectMonstersPending: [] }),
 }));
 
 export function getTowerStats(tower: { type: TowerType; level: number }) {
   const config = TOWER_CONFIGS[tower.type];
   const mult = Math.pow(config.upgradeMultiplier, tower.level - 1);
+  const damageBoost = useGameStore.getState().getTowerDamageBoost();
   return {
-    damage: Math.floor(config.damage * mult),
+    damage: Math.floor(config.damage * mult * (1 + damageBoost)),
     range: config.range + (tower.level - 1) * 10,
     fireRate: Math.max(200, config.fireRate - (tower.level - 1) * 80),
     upgradeCost:

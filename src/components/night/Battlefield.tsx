@@ -14,6 +14,7 @@ export default function Battlefield() {
   const [hoverCell, setHoverCell] = useState<{ x: number; y: number } | null>(null);
   const animationRef = useRef<number>();
   const lastSpawnWaveRef = useRef<number>(-1);
+  const [captureToast, setCaptureToast] = useState<string | null>(null);
 
   const {
     phase,
@@ -23,7 +24,15 @@ export default function Battlefield() {
     selectTower,
     towers,
     selectedTowerType,
+    selectedCaptureTool,
+    enemies,
+    tryCaptureEnemy,
   } = useGameStore();
+
+  const showToast = (msg: string) => {
+    setCaptureToast(msg);
+    setTimeout(() => setCaptureToast(null), 1500);
+  };
 
   useEffect(() => {
     if (phase !== "night") return;
@@ -101,6 +110,27 @@ export default function Battlefield() {
     const gx = Math.floor(x / CELL_SIZE);
     const gy = Math.floor(y / CELL_SIZE);
 
+    if (selectedCaptureTool) {
+      let nearestEnemy = null as null | typeof enemies[0];
+      let nearestDist = 40;
+      for (const en of enemies) {
+        const dx = en.x - x;
+        const dy = en.y - y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearestEnemy = en;
+        }
+      }
+      if (nearestEnemy) {
+        const res = tryCaptureEnemy(nearestEnemy.id, selectedCaptureTool);
+        showToast(res.message);
+      } else {
+        showToast("请点击敌人进行捕获");
+      }
+      return;
+    }
+
     if (selectedTowerType) {
       placeTower(gx, gy);
       return;
@@ -122,6 +152,16 @@ export default function Battlefield() {
 
   if (phase !== "night") return null;
 
+  let cursorClass = "cursor-pointer";
+  let hintText = "💡 点击防御塔查看详情与升级，或选择左侧塔进行放置";
+  if (selectedTowerType) {
+    cursorClass = "cursor-crosshair";
+    hintText = "💡 点击空地放置防御塔，绿色区域可放置";
+  } else if (selectedCaptureTool) {
+    cursorClass = "cursor-grab";
+    hintText = "🎯 选中了捕获道具，点击血量≤30%的敌人进行收编！BOSS无法收编";
+  }
+
   return (
     <div className="flex flex-col items-center">
       <div
@@ -135,7 +175,7 @@ export default function Battlefield() {
           onClick={handleClick}
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
-          className={selectedTowerType ? "cursor-crosshair" : "cursor-pointer"}
+          className={cursorClass}
           style={{
             display: "block",
             maxWidth: "100%",
@@ -143,11 +183,14 @@ export default function Battlefield() {
             imageRendering: "pixelated",
           }}
         />
+        {captureToast && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/80 text-white px-4 py-2 rounded-lg shadow-lg animate-bounce-in text-sm font-medium pointer-events-none">
+            {captureToast}
+          </div>
+        )}
       </div>
-      <div className="mt-2 text-xs text-gray-500 text-center">
-        {selectedTowerType
-          ? "💡 点击空地放置防御塔，绿色区域可放置"
-          : "💡 点击防御塔查看详情与升级，或选择左侧塔进行放置"}
+      <div className="mt-2 text-xs text-gray-500 text-center max-w-md">
+        {hintText}
       </div>
     </div>
   );

@@ -2,6 +2,8 @@ export type GamePhase = "day" | "night" | "settlement";
 
 export type TowerType = "spatula" | "chili" | "freezer";
 
+export type CaptureToolType = "catcher_pot" | "comfort_dish";
+
 export type EnemyType = "cabbage" | "potato" | "tomato" | "meat" | "boss";
 
 export interface Ingredient {
@@ -81,6 +83,38 @@ export interface WaveConfig {
   enemies: { type: EnemyType; count: number; delay: number }[];
 }
 
+export interface CaptureToolConfig {
+  type: CaptureToolType;
+  name: string;
+  emoji: string;
+  cost: number;
+  baseSuccessRate: number;
+  description: string;
+}
+
+export interface CaptureTool {
+  type: CaptureToolType;
+  count: number;
+}
+
+export type MonsterAbilities = "organize_stock" | "reduce_cost" | "enhance_tower";
+
+export interface CapturedMonster {
+  id: string;
+  type: EnemyType;
+  name: string;
+  emoji: string;
+  hunger: number;
+  maxHunger: number;
+  loyalty: number;
+  maxLoyalty: number;
+  ability: MonsterAbilities;
+  abilityValue: number;
+  preferredRecipeId: string;
+  capturedDay: number;
+  willDefect: boolean;
+}
+
 export interface FloatingText {
   id: string;
   x: number;
@@ -88,6 +122,12 @@ export interface FloatingText {
   text: string;
   color: string;
   createdAt: number;
+}
+
+export interface DefectionEvent {
+  day: number;
+  monsterName: string;
+  monsterType: EnemyType;
 }
 
 export interface GameState {
@@ -113,4 +153,9 @@ export interface GameState {
   gridPath: { x: number; y: number }[];
   isPaused: boolean;
   gameOver: boolean;
+  captureTools: CaptureTool[];
+  selectedCaptureTool: CaptureToolType | null;
+  capturedMonsters: CapturedMonster[];
+  todayDefections: DefectionEvent[];
+  defectMonstersPending: CapturedMonster[];
 }

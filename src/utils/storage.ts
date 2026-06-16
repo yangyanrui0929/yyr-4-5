@@ -11,6 +11,8 @@ export function saveGame(state: GameState): void {
       ingredients: state.ingredients,
       recipes: state.recipes,
       phase: state.phase,
+      captureTools: state.captureTools,
+      capturedMonsters: state.capturedMonsters,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
   } catch (e) {

@@ -3,7 +3,9 @@ import TopBar from "@/components/TopBar";
 import ShopPanel from "@/components/day/ShopPanel";
 import MenuPanel from "@/components/day/MenuPanel";
 import DaySidebar from "@/components/day/DaySidebar";
+import MonsterPanel from "@/components/day/MonsterPanel";
 import TowerSelect from "@/components/night/TowerSelect";
+import CaptureToolSelect from "@/components/night/CaptureToolSelect";
 import Battlefield from "@/components/night/Battlefield";
 import TowerInfo from "@/components/night/TowerInfo";
 import WaveInfo from "@/components/night/WaveInfo";
@@ -28,10 +30,11 @@ export default function Game() {
             <div className="lg:col-span-3">
               <ShopPanel />
             </div>
-            <div className="lg:col-span-6">
+            <div className="lg:col-span-5">
               <MenuPanel />
             </div>
-            <div className="lg:col-span-3">
+            <div className="lg:col-span-4 space-y-4">
+              <MonsterPanel />
               <DaySidebar />
             </div>
           </div>
@@ -40,6 +43,7 @@ export default function Game() {
         {phase === "night" && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
             <div className="lg:col-span-3 space-y-4">
+              <CaptureToolSelect />
               <TowerSelect />
               <TowerInfo />
             </div>

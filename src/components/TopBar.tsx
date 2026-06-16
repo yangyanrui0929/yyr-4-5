@@ -1,5 +1,5 @@
 import { useGameStore } from "@/store/useGameStore";
-import { Sun, Moon, Save, RotateCcw, Heart, Coins, Calendar } from "lucide-react";
+import { Sun, Moon, Save, RotateCcw, Heart, Coins, Calendar, Sparkles } from "lucide-react";
 
 export default function TopBar() {
   const {
@@ -9,7 +9,14 @@ export default function TopBar() {
     lives,
     saveProgress,
     resetGame,
+    capturedMonsters,
+    getIngredientDiscount,
+    getTowerDamageBoost,
   } = useGameStore();
+
+  const discount = getIngredientDiscount();
+  const damageBoost = getTowerDamageBoost();
+  const hasBuff = discount > 0 || damageBoost > 0 || capturedMonsters.length > 0;
 
   return (
     <div className="sticky top-0 z-50 bg-gradient-to-r from-kitchen-brown to-amber-900 text-white shadow-xl">
@@ -36,6 +43,17 @@ export default function TopBar() {
             <Heart className="w-4 h-4 text-red-300 fill-red-300" />
             <span className="font-bold text-red-200">{lives}</span>
           </div>
+
+          {hasBuff && (
+            <div className="flex items-center gap-1.5 bg-emerald-500/20 rounded-full px-4 py-1.5">
+              <Sparkles className="w-4 h-4 text-emerald-300" />
+              <span className="font-bold text-emerald-200 text-sm">
+                👾{capturedMonsters.length}
+                {discount > 0 && <span className="ml-1">🛒-{Math.floor(discount * 100)}%</span>}
+                {damageBoost > 0 && <span className="ml-1">⚔️+{Math.floor(damageBoost * 100)}%</span>}
+              </span>
+            </div>
+          )}
 
           <div className="flex items-center gap-1.5 bg-blue-500/20 rounded-full px-4 py-1.5">
             {phase === "day" ? (

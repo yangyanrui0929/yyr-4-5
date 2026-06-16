@@ -7,6 +7,8 @@ import {
   CANVAS_HEIGHT,
   TOWER_CONFIGS,
   ENEMY_CONFIGS,
+  MONSTER_DEFAULT_STATS,
+  CAPTURE_TOOL_CONFIGS,
 } from "@/game/config";
 import type { Enemy, Bullet, Tower, FloatingText } from "@/types/game";
 
@@ -263,6 +265,12 @@ export async function spawnWaveEnemies(waveIndex: number) {
   spawnQueueActive = true;
   const startPos = state.path[0];
 
+  if (waveIndex === 0 && state.defectMonstersPending.length > 0) {
+    useGameStore.getState().addDefectedMonsterToWave(state.defectMonstersPending);
+    useGameStore.getState().clearPendingDefections();
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+
   for (const group of wave.enemies) {
     for (let i = 0; i < group.count; i++) {
       if (useGameStore.getState().phase !== "night") {
@@ -447,6 +455,34 @@ export function drawBattlefield(
     const isFrozen = enemy.slowUntil > performance.now();
     const scale = enemy.type === "boss" ? 1.5 : 1;
     const r = 16 * scale;
+    const hpRatio = Math.max(0, enemy.hp / enemy.maxHp);
+    const canCapture = enemy.type !== "boss" && hpRatio <= MONSTER_DEFAULT_STATS.captureHpThreshold;
+    const toolActive = !!state.selectedCaptureTool;
+
+    if (canCapture) {
+      const pulse = (Math.sin(performance.now() / 200) + 1) / 2;
+      const ringColor = toolActive
+        ? `rgba(76,175,80,${0.3 + pulse * 0.4})`
+        : `rgba(255,193,7,${0.2 + pulse * 0.3})`;
+      ctx.strokeStyle = ringColor;
+      ctx.lineWidth = 3;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.arc(enemy.x, enemy.y, r + 10 + pulse * 3, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.font = "14px sans-serif";
+      ctx.textAlign = "center";
+      if (toolActive) {
+        const toolCfg = CAPTURE_TOOL_CONFIGS[state.selectedCaptureTool!];
+        ctx.fillStyle = "#4CAF50";
+        ctx.fillText(toolCfg.emoji, enemy.x, enemy.y - r - 20);
+      } else {
+        ctx.fillStyle = "#FF9800";
+        ctx.fillText("可捕获", enemy.x, enemy.y - r - 20);
+      }
+    }
 
     if (isFrozen) {
       ctx.fillStyle = "rgba(79,195,247,0.3)";
@@ -475,7 +511,6 @@ export function drawBattlefield(
     ctx.fillStyle = "rgba(0,0,0,0.5)";
     ctx.fillRect(barX, barY, barW, barH);
 
-    const hpRatio = Math.max(0, enemy.hp / enemy.maxHp);
     ctx.fillStyle =
       hpRatio > 0.5 ? "#4CAF50" : hpRatio > 0.25 ? "#FFC107" : "#F44336";
     ctx.fillRect(barX, barY, barW * hpRatio, barH);

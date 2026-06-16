@@ -1,5 +1,5 @@
 import { useGameStore } from "@/store/useGameStore";
-import { TrendingUp, TrendingDown, DollarSign, Sun, RotateCcw, Skull } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, Sun, RotateCcw, Skull, Heart } from "lucide-react";
 
 export default function SettlementModal() {
   const {
@@ -11,6 +11,8 @@ export default function SettlementModal() {
     gameOver,
     startDay,
     resetGame,
+    capturedMonsters,
+    todayDefections,
   } = useGameStore();
 
   const netProfit = todayRevenue - todayExpense;
@@ -131,6 +133,58 @@ export default function SettlementModal() {
                 {isProfit ? "+" : "-"}💰 {Math.abs(netProfit)}
               </div>
             </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="p-3 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl border-2 border-emerald-200">
+              <div className="text-xs text-emerald-700 font-semibold mb-1 flex items-center gap-1">
+                <Heart className="w-3.5 h-3.5 fill-emerald-500 text-emerald-500" />
+                食材怪伙伴
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {capturedMonsters.length === 0 ? (
+                  <span className="text-xs text-slate-500 italic">暂无伙伴</span>
+                ) : (
+                  capturedMonsters.map((m) => (
+                    <span
+                      key={m.id}
+                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-white rounded shadow-sm text-xs"
+                      title={`${m.name} 饱腹${Math.floor(m.hunger)} 忠诚${Math.floor(m.loyalty)}`}
+                    >
+                      {m.emoji}
+                      <span className="text-emerald-700">
+                        {m.loyalty <= 20 ? "⚠️" : Math.floor(m.loyalty)}
+                      </span>
+                    </span>
+                  ))
+                )}
+              </div>
+              <div className="text-[11px] text-emerald-600 mt-1 font-bold">
+                共 {capturedMonsters.length} 只
+              </div>
+            </div>
+
+            {todayDefections.length > 0 && (
+              <div className="p-3 bg-gradient-to-br from-red-50 to-orange-50 rounded-xl border-2 border-red-300">
+                <div className="text-xs text-red-700 font-semibold mb-1 flex items-center gap-1">
+                  <Skull className="w-3.5 h-3.5" />
+                  昨晚叛逃
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {todayDefections.map((d, i) => (
+                    <span
+                      key={i}
+                      className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-white rounded shadow-sm text-xs text-red-600"
+                    >
+                      💀 {d.monsterName}
+                    </span>
+                  ))}
+                </div>
+                <div className="text-[11px] text-red-600 mt-1 font-bold">
+                  共 {todayDefections.length} 只带队反扑
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
